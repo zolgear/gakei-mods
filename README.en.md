@@ -9,6 +9,7 @@ Samples for the mod feature of [GAKEI](https://github.com/zolgear/gakei), a self
 | Stop prompts that contain banned words before they are sent to an AI | [`python-mods/banned-words`](python-mods/banned-words) | Python mod | `ai.before_send` |
 | Log what is sent to AIs, and every ingest and run | [`python-mods/audit-log`](python-mods/audit-log) | Python mod | all three |
 | Deny or flag specific images (a SHA-256 list) | [`python-mods/hash-blocklist`](python-mods/hash-blocklist) | Python mod | `asset.ingested`, `run.finished`, `ai.before_send` |
+| See what mods receive and return any allow / deny / verdict while building an integration (debugging only, not for production) | [`python-mods/echo`](python-mods/echo) | Python mod | all three |
 | Check and judge in your own system (separate server) | [`webhook-receivers/python`](webhook-receivers/python) | Webhook | all three |
 | Return verdicts later (slow reviews) | [`webhook-receivers/python/submit_verdict.py`](webhook-receivers/python/submit_verdict.py) | Webhook | verdict submission API |
 | Receive webhooks in Node.js | [`webhook-receivers/node`](webhook-receivers/node) | Webhook | `ai.before_send` |
@@ -81,6 +82,47 @@ Returns `deny` / `flag` verdicts for images whose SHA-256 is on the deny / flag 
 Settings: `deny_file`, `flag_file` (one `sha256 label` per line; see `deny-list.example.txt`), `deny_sha256`, `flag_sha256` (comma-separated), `deny_label`, `flag_label`, `report_ok` (also return `ok`), `block_send`.
 
 Subscribe to `asset.ingested` with **"wait for verdict"** so that denied images are never written to storage. **A `deny` cannot be undone**: GAKEI discards the image (and other images with the same content). Put only images you are sure about on the deny list; use the flag list otherwise.
+
+### `echo`
+
+**For debugging only. Do not use it in production.** A mod for people building mod integrations (webhook receivers or other mods) to see (1) when each event is called and with what content, in GAKEI's server log, and (2) how GAKEI behaves when a mod allows, denies or returns verdicts (the denial message, discarding images, failures and retries, timeouts). Responses come from the admin settings or from markers such as `[[echo:deny]]` written in the prompt; markers override the settings. It subscribes to all three events and returns verdicts (`returns_verdicts = true`).
+
+**Log:** one summary line per event on the logger `gakei.mods.echo` (event, `event_id`, purpose / kind / source / status, target provider / model / locality, image counts and SHA-256 prefixes, `run_id`, and the chosen response with where it came from). Text is summarized by length only. With `log_payload` on (default), the whole event envelope is also logged as pretty JSON — **this includes prompts, parameters and the user's id, email and name.** The mod's setting values (`ctx.settings`) are never logged.
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `before_send` | `allow` | Response to `ai.before_send` (`allow` / `deny`) |
+| `ingested` | `none` | Verdict for `asset.ingested` (`none` / `ok` / `flag` / `deny`; `none` returns no verdict) |
+| `run_finished` | `none` | Verdict for `run.finished` (same values), given to each output image and to the run |
+| `delay_seconds` | 0 | Seconds to wait before responding (0-300), for timeout checks |
+| `fail_events` | empty | Events that raise an exception (comma-separated: `ai.before_send`, `asset.ingested`, `run.finished`, or `send`, `ingested`, `run`) |
+| `markers` | on | Read the markers below |
+| `log_payload` | on | Also log the whole envelope as JSON |
+
+Invalid values are logged as a warning and replaced by the default (`delay_seconds` above 300 becomes 300).
+
+| Marker | Meaning |
+|---|---|
+| `[[echo:allow]]` / `[[echo:deny]]` | Allow / deny in `ai.before_send` |
+| `[[echo:ok]]` / `[[echo:flag]]` / `[[echo:deny]]` | Return that verdict for `asset.ingested` and `run.finished` |
+| `[[echo:error]]` | Raise an exception |
+| `[[echo:sleep=N]]` | Wait N seconds before responding (max 60) |
+| `[[echo:send:…]]`, `[[echo:ingested:…]]`, `[[echo:run:…]]` | Apply only to that event (e.g. `[[echo:ingested:deny]]`) |
+
+- Case-insensitive; several markers can be combined (`[[echo:sleep=5]] [[echo:deny]]`). A plain `[[echo:deny]]` applies to every event, so in a generation prompt it stops the send first; use `[[echo:ingested:deny]]` or `[[echo:run:deny]]` to deny only the verdict events.
+- `ai.before_send` reads only `allow` / `deny`; the verdict events read only `ok` / `flag` / `deny`. With several response markers the strongest wins (`deny` > `flag` > `ok` > `allow`), and event-scoped markers win over unscoped ones. A `sleep` marker overrides `delay_seconds`.
+- Where markers are read: `ai.before_send` reads every text part; `run.finished` reads the run's prompt; `asset.ingested` reads the prompt of the producing run through `ctx.get_run` (this also works when called synchronously with "wait for verdict"); uploads and other ingests without a run use the settings only.
+- Denial reasons and verdict messages say where the response came from (`echo: マーカー [[echo:deny]] による拒否`, `echo: 設定 ingested による判定`). Verdict `label` is `echo`, `reference` is the event's `event_id`.
+- **Markers are sent to the AI as part of the prompt** unless the send is denied (GAKEI does not rewrite text).
+- **Anyone who can write a prompt can trigger denials and `deny` verdicts**, and `deny` discards images irreversibly. Enable it only in test environments.
+
+Things you can check:
+
+- **Denial before sending:** generate with `[[echo:deny]]`. The run fails with `hook_denied` and shows the reason.
+- **Verdicts:** generate with `[[echo:flag]]`; the outputs and the run get a `flag` verdict.
+- **Discarding images:** turn on "wait for verdict" for echo and generate with `[[echo:ingested:deny]]` (or set `ingested` to `deny` and upload). The image is never stored and its content returns 410.
+- **Failures and retries:** set `fail_events` to `run` (without "wait for verdict"); the `run.finished` delivery fails and GAKEI retries it (30 s, 60 s, ...). With `send`, "on failure" decides whether the send is stopped or allowed.
+- **Timeouts:** set echo's timeout to 1 second and generate with `[[echo:send:sleep=3]]` (or raise `delay_seconds`).
 
 ## Webhook receiver samples
 
