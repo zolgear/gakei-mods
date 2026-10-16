@@ -1,0 +1,34 @@
+# 禁止語のチェック: 外部の AI へ送る直前(ai.before_send)に、送る文に禁止語が含まれていれば拒否する。
+id = "banned-words"
+name = { ja = "禁止語のチェック", en = "Banned words" }
+version = "1.0.0"
+api_version = 1
+module = "main"
+events = ["ai.before_send"]
+# ai.before_send だけを購読し、判定(asset.ingested・run.finished への応答)は返さない。
+returns_verdicts = false
+
+[settings.words]
+type = "string"
+label = { ja = "禁止語(カンマ区切り)", en = "Banned words (comma-separated)" }
+default = "社外秘,confidential"
+
+[settings.words_file]
+type = "path"
+label = { ja = "禁止語のファイル(1行に1語。# から行末は無視。空なら使わない)", en = "Banned words file (one per line; # starts a comment; empty to skip)" }
+default = ""
+
+[settings.purposes]
+type = "string"
+label = { ja = "検査する目的(カンマ区切り。image_run,annotation,assistant,embedding。空ならすべて)", en = "Purposes to check (comma-separated: image_run, annotation, assistant, embedding; empty checks all)" }
+default = ""
+
+[settings.localities]
+type = "string"
+label = { ja = "検査する送り先の区分(カンマ区切り。local,cloud,unset。空ならすべて)", en = "Destination localities to check (comma-separated: local, cloud, unset; empty checks all)" }
+default = "cloud,unset"
+
+[settings.roles]
+type = "string"
+label = { ja = "検査する文の種類(カンマ区切り。prompt,negative_prompt,user など。空ならすべて)", en = "Text roles to check (comma-separated: prompt, negative_prompt, user, ...; empty checks all)" }
+default = ""

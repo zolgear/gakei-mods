@@ -1,0 +1,901 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GAKEI Mod contract",
+  "description": "schema_version 1。項目を足すときは版を上げない。消す・意味を変えるときは schema_version を上げる(docs/mods.md)。",
+  "x-gakei-schema-version": 1,
+  "$defs": {
+    "Actor": {
+      "description": "実行したユーザー。個人モードでは、イベントの `actor` そのものが null。",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "email": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Email"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "Actor",
+      "type": "object"
+    },
+    "AiBeforeSendEvent": {
+      "type": "object",
+      "description": "外部の AI へ送る直前に同期で呼ぶ。応答は Decision。",
+      "required": [
+        "schema_version",
+        "event",
+        "event_id",
+        "occurred_at",
+        "instance",
+        "actor",
+        "subject"
+      ],
+      "properties": {
+        "schema_version": {
+          "type": "integer",
+          "const": 1
+        },
+        "event": {
+          "type": "string",
+          "const": "ai.before_send"
+        },
+        "event_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "instance": {
+          "$ref": "#/$defs/Instance"
+        },
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Actor"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "subject": {
+          "$ref": "#/$defs/BeforeSendSubject"
+        }
+      }
+    },
+    "AssetIngestedEvent": {
+      "type": "object",
+      "description": "Asset を取り込んだ後に呼ぶ。応答は VerdictsResponse(省略できる)。",
+      "required": [
+        "schema_version",
+        "event",
+        "event_id",
+        "occurred_at",
+        "instance",
+        "actor",
+        "subject"
+      ],
+      "properties": {
+        "schema_version": {
+          "type": "integer",
+          "const": 1
+        },
+        "event": {
+          "type": "string",
+          "const": "asset.ingested"
+        },
+        "event_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "instance": {
+          "$ref": "#/$defs/Instance"
+        },
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Actor"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "subject": {
+          "$ref": "#/$defs/AssetIngestedSubject"
+        }
+      }
+    },
+    "AssetIngestedSubject": {
+      "properties": {
+        "asset": {
+          "$ref": "#/$defs/ImageRef"
+        },
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string",
+          "enum": [
+            "upload",
+            "url",
+            "sketch",
+            "mask",
+            "composite",
+            "generated",
+            "import",
+            "mcp"
+          ]
+        },
+        "run_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Run Id"
+        },
+        "rating": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rating"
+        }
+      },
+      "required": [
+        "asset",
+        "kind",
+        "source"
+      ],
+      "title": "AssetIngestedSubject",
+      "type": "object"
+    },
+    "BeforeSendSubject": {
+      "properties": {
+        "purpose": {
+          "title": "Purpose",
+          "type": "string",
+          "enum": [
+            "image_run",
+            "annotation",
+            "assistant",
+            "embedding"
+          ]
+        },
+        "target": {
+          "$ref": "#/$defs/Target"
+        },
+        "text": {
+          "items": {
+            "$ref": "#/$defs/TextPart"
+          },
+          "title": "Text",
+          "type": "array"
+        },
+        "params": {
+          "additionalProperties": true,
+          "title": "Params",
+          "type": "object"
+        },
+        "images": {
+          "items": {
+            "$ref": "#/$defs/ImageRef"
+          },
+          "title": "Images",
+          "type": "array"
+        },
+        "run_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Run Id"
+        },
+        "asset_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Asset Id"
+        }
+      },
+      "required": [
+        "purpose",
+        "target"
+      ],
+      "title": "BeforeSendSubject",
+      "type": "object"
+    },
+    "ConnectionRef": {
+      "description": "LLM・VLM・埋め込みの接続先(ADR-0032)。`builtin` は組み込みの「OpenAI の設定」。",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "builtin": {
+          "default": false,
+          "title": "Builtin",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "ConnectionRef",
+      "type": "object"
+    },
+    "Decision": {
+      "description": "`ai.before_send` の応答。`reason` は利用者に見せる文、`reference` は外部の受付番号など。",
+      "properties": {
+        "decision": {
+          "enum": [
+            "allow",
+            "deny"
+          ],
+          "title": "Decision",
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "reference": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reference"
+        }
+      },
+      "required": [
+        "decision"
+      ],
+      "title": "Decision",
+      "type": "object"
+    },
+    "Event": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/AiBeforeSendEvent"
+        },
+        {
+          "$ref": "#/$defs/AssetIngestedEvent"
+        },
+        {
+          "$ref": "#/$defs/RunFinishedEvent"
+        }
+      ]
+    },
+    "ImageRef": {
+      "description": "送る画像・取り込んだ画像。`asset_id` は Asset でない画像(画像で探すときの画像)では null。",
+      "properties": {
+        "asset_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Asset Id"
+        },
+        "sha256": {
+          "title": "Sha256",
+          "type": "string"
+        },
+        "width": {
+          "title": "Width",
+          "type": "integer"
+        },
+        "height": {
+          "title": "Height",
+          "type": "integer"
+        },
+        "bytes": {
+          "title": "Bytes",
+          "type": "integer"
+        },
+        "mime": {
+          "title": "Mime",
+          "type": "string"
+        },
+        "role": {
+          "default": null,
+          "title": "Role",
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "primary",
+                "reference",
+                "mask",
+                "attachment"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "asset_id",
+        "sha256",
+        "width",
+        "height",
+        "bytes",
+        "mime"
+      ],
+      "title": "ImageRef",
+      "type": "object"
+    },
+    "Instance": {
+      "description": "イベントを送った GAKEI。`name` は管理者が決めた名前(未設定なら null)。",
+      "properties": {
+        "version": {
+          "title": "Version",
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        }
+      },
+      "required": [
+        "version"
+      ],
+      "title": "Instance",
+      "type": "object"
+    },
+    "RunError": {
+      "properties": {
+        "code": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Code"
+        },
+        "message": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Message"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "RunError",
+      "type": "object"
+    },
+    "RunFinishedEvent": {
+      "type": "object",
+      "description": "Run が終わった後に呼ぶ。応答は VerdictsResponse(省略できる)。",
+      "required": [
+        "schema_version",
+        "event",
+        "event_id",
+        "occurred_at",
+        "instance",
+        "actor",
+        "subject"
+      ],
+      "properties": {
+        "schema_version": {
+          "type": "integer",
+          "const": 1
+        },
+        "event": {
+          "type": "string",
+          "const": "run.finished"
+        },
+        "event_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "instance": {
+          "$ref": "#/$defs/Instance"
+        },
+        "actor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Actor"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "subject": {
+          "$ref": "#/$defs/RunFinishedSubject"
+        }
+      }
+    },
+    "RunFinishedSubject": {
+      "properties": {
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "status": {
+          "title": "Status",
+          "type": "string"
+        },
+        "provider": {
+          "title": "Provider",
+          "type": "string"
+        },
+        "model": {
+          "title": "Model",
+          "type": "string"
+        },
+        "operation": {
+          "title": "Operation",
+          "type": "string"
+        },
+        "prompt": {
+          "title": "Prompt",
+          "type": "string"
+        },
+        "params": {
+          "additionalProperties": true,
+          "title": "Params",
+          "type": "object"
+        },
+        "inputs": {
+          "items": {
+            "$ref": "#/$defs/ImageRef"
+          },
+          "title": "Inputs",
+          "type": "array"
+        },
+        "outputs": {
+          "items": {
+            "$ref": "#/$defs/ImageRef"
+          },
+          "title": "Outputs",
+          "type": "array"
+        },
+        "usage": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Usage"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RunError"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "run_id",
+        "status",
+        "provider",
+        "model",
+        "operation",
+        "prompt"
+      ],
+      "title": "RunFinishedSubject",
+      "type": "object"
+    },
+    "Target": {
+      "description": "送り先。API キーは含めない。",
+      "properties": {
+        "provider": {
+          "title": "Provider",
+          "type": "string"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Model"
+        },
+        "host": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Host"
+        },
+        "locality": {
+          "title": "Locality",
+          "type": "string",
+          "enum": [
+            "local",
+            "cloud",
+            "unset"
+          ]
+        },
+        "locality_source": {
+          "title": "Locality Source",
+          "type": "string",
+          "enum": [
+            "workflow",
+            "connection",
+            "default"
+          ]
+        },
+        "workflow": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WorkflowRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "connection": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ConnectionRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "provider",
+        "model",
+        "host",
+        "locality",
+        "locality_source"
+      ],
+      "title": "Target",
+      "type": "object"
+    },
+    "TextPart": {
+      "description": "送る文。`role` は prompt / negative_prompt / system / user / assistant / tool / tags /\nquery など。",
+      "properties": {
+        "role": {
+          "title": "Role",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "role",
+        "text"
+      ],
+      "title": "TextPart",
+      "type": "object"
+    },
+    "Verdict": {
+      "description": "`asset.ingested` と `run.finished` の判定。`score` は 0〜1(任意)。",
+      "properties": {
+        "target": {
+          "$ref": "#/$defs/VerdictTarget"
+        },
+        "verdict": {
+          "enum": [
+            "ok",
+            "flag",
+            "deny"
+          ],
+          "title": "Verdict",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "score": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Score"
+        },
+        "message": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Message"
+        },
+        "reference": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reference"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        }
+      },
+      "required": [
+        "target",
+        "verdict"
+      ],
+      "title": "Verdict",
+      "type": "object"
+    },
+    "VerdictSubmission": {
+      "description": "判定の受付の API(POST /api/mods/{mod_id}/verdicts)の本文。",
+      "anyOf": [
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Verdict"
+          },
+          "maxItems": 100
+        },
+        {
+          "type": "object",
+          "required": [
+            "verdicts"
+          ],
+          "properties": {
+            "verdicts": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/Verdict"
+                  },
+                  "maxItems": 100
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "VerdictTarget": {
+      "description": "判定の対象。`type` は asset か run。",
+      "properties": {
+        "type": {
+          "enum": [
+            "asset",
+            "run"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "id"
+      ],
+      "title": "VerdictTarget",
+      "type": "object"
+    },
+    "VerdictsResponse": {
+      "description": "asset.ingested / run.finished の応答。null・空の本文は判定なし。",
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Verdict"
+          },
+          "maxItems": 100
+        },
+        {
+          "type": "object",
+          "required": [
+            "verdicts"
+          ],
+          "properties": {
+            "verdicts": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/Verdict"
+                  },
+                  "maxItems": 100
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "WorkflowRef": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "WorkflowRef",
+      "type": "object"
+    }
+  }
+}

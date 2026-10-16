@@ -1,0 +1,29 @@
+# 記録: 3つのイベントを、日付ごとの JSON Lines のファイルに追記する。送信は止めない。
+id = "audit-log"
+name = { ja = "イベントの記録(JSON Lines)", en = "Audit log (JSON Lines)" }
+version = "1.0.0"
+api_version = 1
+module = "main"
+events = ["ai.before_send", "asset.ingested", "run.finished"]
+# 書き出すだけで判定は返さない(「判定を待つ」を選べないようにする)。
+returns_verdicts = false
+
+[settings.log_dir]
+type = "path"
+label = { ja = "記録のフォルダ(GAKEI のサーバーの上の絶対パス。無ければ作る)", en = "Log folder (absolute path on the GAKEI server; created if missing)" }
+default = ""
+
+[settings.include_text]
+type = "bool"
+label = { ja = "プロンプトなどの文とパラメーターを記録する(オフなら文の長さと sha256 だけ)", en = "Record prompts, other text and parameters (off: only length and sha256 of text)" }
+default = true
+
+[settings.include_actor]
+type = "bool"
+label = { ja = "実行した人(id、メール、表示名)を記録する", en = "Record the user (id, email, display name)" }
+default = true
+
+[settings.max_text_chars]
+type = "number"
+label = { ja = "文を記録する長さの上限(文字数)", en = "Maximum characters of each text to record" }
+default = 2000

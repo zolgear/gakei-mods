@@ -1,0 +1,13 @@
+{
+  "name": "gakei-webhook-receiver-example",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node receiver.mjs",
+    "test": "node --test"
+  }
+}

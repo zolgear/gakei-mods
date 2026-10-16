@@ -1,0 +1,49 @@
+# sha256 の一覧での判定: 一覧に一致した画像に deny(拒否)か flag(印だけ)の判定を返す。
+# 取り込みのたびに確かめるなら、asset.ingested を「判定を待つ」で購読する(deny の画像を一度も保存しない)。
+id = "hash-blocklist"
+name = { ja = "sha256 の一覧での判定", en = "SHA-256 blocklist" }
+version = "1.0.0"
+api_version = 1
+module = "main"
+events = ["asset.ingested", "run.finished", "ai.before_send"]
+returns_verdicts = true
+
+[settings.deny_file]
+type = "path"
+label = { ja = "拒否する画像の一覧のファイル(1行に「sha256 ラベル」。空なら使わない)", en = "Deny list file (one \"sha256 label\" per line; empty to skip)" }
+default = ""
+
+[settings.flag_file]
+type = "path"
+label = { ja = "印を付ける画像の一覧のファイル(形は拒否の一覧と同じ)", en = "Flag list file (same format as the deny list)" }
+default = ""
+
+[settings.deny_sha256]
+type = "string"
+label = { ja = "拒否する画像の sha256(カンマ区切り。ファイルと併用できる)", en = "SHA-256 values to deny (comma-separated; combined with the file)" }
+default = ""
+
+[settings.flag_sha256]
+type = "string"
+label = { ja = "印を付ける画像の sha256(カンマ区切り)", en = "SHA-256 values to flag (comma-separated)" }
+default = ""
+
+[settings.deny_label]
+type = "string"
+label = { ja = "拒否の判定の名前(一覧の行にラベルが無いとき)", en = "Label for deny verdicts (when the list line has none)" }
+default = "禁止の一覧に一致"
+
+[settings.flag_label]
+type = "string"
+label = { ja = "印の判定の名前(一覧の行にラベルが無いとき)", en = "Label for flag verdicts (when the list line has none)" }
+default = "要確認の一覧に一致"
+
+[settings.report_ok]
+type = "bool"
+label = { ja = "一致しなかった画像にも ok の判定を返す", en = "Also return ok verdicts for images that do not match" }
+default = false
+
+[settings.block_send]
+type = "bool"
+label = { ja = "AI へ送る画像が拒否の一覧に一致したら、送信を止める(ai.before_send)", en = "Stop sending to AI when an input image is on the deny list (ai.before_send)" }
+default = true

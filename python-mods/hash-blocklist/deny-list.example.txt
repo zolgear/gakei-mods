@@ -1,0 +1,5 @@
+# hash-blocklist の一覧のファイルの例(設定の deny_file / flag_file に、このファイルのパスを書く)。
+# 1行に「sha256 ラベル」。ラベルは省略できる(省略すると設定の deny_label / flag_label)。
+# '#' から行末は無視する。大文字・小文字は区別しない。
+9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08  社外の素材
+60303ae22b998861bce3b28f33eec1be758a213c86c93c076dbe9f558c11c752
