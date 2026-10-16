@@ -11,6 +11,7 @@ English: [README.en.md](README.en.md)
 | AI へ送る前に、禁止語を含むプロンプトを止める | [`python-mods/banned-words`](python-mods/banned-words) | Python の Mod | `ai.before_send` |
 | AI へ送る前の内容と、取り込み・生成を記録する | [`python-mods/audit-log`](python-mods/audit-log) | Python の Mod | 3つすべて |
 | 決まった画像(sha256 の一覧)を拒否する・印を付ける | [`python-mods/hash-blocklist`](python-mods/hash-blocklist) | Python の Mod | `asset.ingested`、`run.finished`、`ai.before_send` |
+| Mod の連携を作るときに、届く中身をログで見て、許可・拒否・判定を思いどおりに返す(デバッグ用。本番では使わない) | [`python-mods/echo`](python-mods/echo) | Python の Mod | 3つすべて |
 | 社内のシステムで検査・判定する(別のサーバーで受ける) | [`webhook-receivers/python`](webhook-receivers/python) | Webhook | 3つすべて |
 | 判定を後から返す(審査に時間がかかる) | [`webhook-receivers/python/submit_verdict.py`](webhook-receivers/python/submit_verdict.py) | Webhook | 判定の受付の API |
 | Node.js で受ける | [`webhook-receivers/node`](webhook-receivers/node) | Webhook | `ai.before_send` |
@@ -128,6 +129,78 @@ docker run -d --name gakei -p 127.0.0.1:8000:8000 \
 - **`deny` の判定は取り消せない。** 後で `ok` を返しても画像は戻らない。同じ内容(同じ sha256)のほかの画像にも及ぶ。一覧には、確かに拒否するものだけを入れる。迷うものは `flag`(印を付けて表示するだけ)の一覧に入れる。
 - 一覧のファイルが読めないときは例外になる。非同期の購読は送り直し、「判定を待つ」購読と `ai.before_send` は「失敗のとき」の扱いに従う(「止める」なら、取り込んだ画像を残さない)。
 - テスト送信のダミーの画像は `asset_id` が null なので、Asset への判定は作らない(`run.finished` では Run へのまとめの判定だけが返る)。
+
+### `echo` — デバッグ用のエコー
+
+**デバッグ用。本番では使わない。** Mod の連携(Webhook の受け口や、ほかの Mod)を作る人が、次を確かめるための Mod。
+
+1. いつ、どのイベントが、どんな中身で呼ばれるか(GAKEI のサーバーのログに出す)。
+2. 許可・拒否・判定を思いどおりに返したときの、GAKEI の振る舞い(拒否の表示、画像を残さない処理、失敗と送り直し、時間切れ)。
+
+応答は、管理者設定の値か、プロンプトに書いたマーカー(`[[echo:deny]]` など)で決める。マーカーは設定より優先するので、生成の画面から1回ごとに応答を変えられる。
+
+3つのイベントすべてを購読し、判定を返す(`returns_verdicts = true`)。
+
+#### ログ
+
+イベントごとに、GAKEI のサーバーのログ(ロガー `gakei.mods.echo`)に1行の要約を出す。
+
+```text
+echo: event=ai.before_send event_id=… purpose=image_run target=openai/gpt-image-1 locality=cloud(default) text=[prompt:23字] images=0[] run_id=… asset_id=- 応答=deny(出どころ: マーカー [[echo:deny]])
+echo: event=asset.ingested event_id=… kind=generated source=generated asset_id=… sha256=6b8d2599d7ce size=1024x1024 mime=image/png run_id=… rating=- run_prompt=35字 応答=deny(出どころ: マーカー [[echo:ingested:deny]])
+echo: event=run.finished event_id=… status=succeeded target=openai/gpt-image-1 operation=generate run_id=… prompt=35字 inputs=0[] outputs=2[6b8d2599d7ce, 543436859fb3] 応答=none(判定を返さない)(出どころ: 設定 run_finished)
+```
+
+- 要約には、文の長さだけを出す(中身は出さない)。画像は sha256 の先頭 12 文字。待つ秒数と、例外を投げるときはその出どころも出す。
+- 設定 `log_payload` がオン(既定)なら、続けてイベントの封筒全体(docs/mods.md の3章)を整形した JSON で出す。**プロンプト、パラメーター、実行した人(id、メール、表示名)がそのままログに残る。** ログを人に渡すとき・ログを集めているときは注意する。
+- Mod の設定の値(`ctx.settings`)はログに出さない。
+
+#### 設定
+
+| 設定 | 既定 | 内容 |
+|---|---|---|
+| `before_send` | `allow` | `ai.before_send` への応答(`allow` / `deny`) |
+| `ingested` | `none` | `asset.ingested` の判定(`none` / `ok` / `flag` / `deny`。`none` は判定を返さない) |
+| `run_finished` | `none` | `run.finished` の判定(同上)。出力の画像ごとと、Run に同じ判定を付ける |
+| `delay_seconds` | 0 | 応答する前に待つ秒数(0〜300)。時間切れの確認用 |
+| `fail_events` | 空 | 例外を投げるイベント(カンマ区切り。`ai.before_send`、`asset.ingested`、`run.finished`。`send`、`ingested`、`run` とも書ける) |
+| `markers` | オン | プロンプトなどの文のマーカーを読む(下の表) |
+| `log_payload` | オン | 封筒全体を整形した JSON でもログに出す |
+
+不正な値(知らない選択肢、負の秒数、数でない値など)は、ログに警告を出して既定値として扱う。`delay_seconds` が 300 を超えるときは 300 にする。
+
+#### マーカー
+
+プロンプトなどの文に書くと、設定より優先する。大文字・小文字は区別しない。複数書ける(例: `[[echo:sleep=5]] [[echo:deny]]` は 5 秒待ってから拒否する)。
+
+| マーカー | 内容 |
+|---|---|
+| `[[echo:allow]]` / `[[echo:deny]]` | `ai.before_send` で許可する・拒否する |
+| `[[echo:ok]]` / `[[echo:flag]]` / `[[echo:deny]]` | `asset.ingested` と `run.finished` で、その判定を返す |
+| `[[echo:error]]` | 例外を投げる(失敗の確認用) |
+| `[[echo:sleep=N]]` | N 秒待ってから応答する(上限 60 秒。小数も書ける) |
+| `[[echo:send:…]]`、`[[echo:ingested:…]]`、`[[echo:run:…]]` | イベントを前に付けると、そのイベントだけに効く(例: `[[echo:ingested:deny]]`、`[[echo:send:sleep=3]]`) |
+
+- `[[echo:deny]]` はどのイベントにも効く。生成のプロンプトに書くと、まず `ai.before_send` で送信が止まり、画像はできない。取り込みや Run の判定だけを `deny` にしたいときは `[[echo:ingested:deny]]` や `[[echo:run:deny]]` と書く。
+- `ai.before_send` は `allow` / `deny` だけを読み(`ok` と `flag` は無視する)、`asset.ingested` と `run.finished` は `ok` / `flag` / `deny` だけを読む(`allow` は無視する)。
+- 応答のマーカーが複数あれば、強いほうを採る(`deny` > `flag` > `ok` > `allow`)。イベントを付けたマーカーがあれば、付けないものより優先する。
+- 待つのは、マーカーの `sleep` があればそれ(複数なら長いほう)、無ければ設定の `delay_seconds`。待ってから例外を投げる・応答する(要約のログは待つ前に出す)。
+- どこから読むか:
+  - `ai.before_send`: 送る文のすべて(`subject.text` の各パート。プロンプト、ネガティブプロンプト、アシスタントへの発言など)。
+  - `run.finished`: Run のプロンプト(`subject.prompt`)。
+  - `asset.ingested`: 生成の出力なら、`ctx.get_run` でその Run のプロンプトを読む(「判定を待つ」で同期に呼ばれたときも読める)。アップロードなど Run の無い取り込みは、設定だけで決める。
+- 拒否の理由と判定の文に、出どころを書く(「echo: マーカー [[echo:deny]] による拒否」「echo: 設定 ingested による判定」)。判定の `label` は `echo`、`reference` はイベントの `event_id`。
+- **マーカーは、拒否しない限り、プロンプトの一部としてそのまま AI に送られる**(GAKEI は文を書き換えない)。生成の結果に影響することがある。
+- **マーカーを書けば、誰でも拒否や `deny` の判定を出せる。** `deny` の判定を受けた画像は残らない(取り消せない)。確認用の環境だけで有効にする。
+
+#### 確かめられることの例
+
+- **送る前の拒否の表示:** プロンプトに `[[echo:deny]]` を書いて生成する。Run は失敗になり(`hook_denied`)、「エコー(デバッグ用) が送信を止めました: echo: マーカー [[echo:deny]] による拒否」と出る。
+- **判定の表示:** `[[echo:flag]]` で生成する。出力の画像と Run に `flag` の判定(`echo`)が付く(既定の非同期の購読では、取り込みの後に届く)。
+- **画像を残さない処理:** 管理者設定の「Mod」で echo を「判定を待つ」にして、`[[echo:ingested:deny]]` で生成する(または設定 `ingested` を `deny` にしてアップロードする)。画像は一度も保存されず、「画像なし(拒否)」になる(中身は 410)。非同期の購読のまま `deny` を返すと、取り込みの後で原本と派生が消える。
+- **失敗と送り直し:** 設定 `fail_events` を `run` にする(「判定を待つ」はオフ)。`run.finished` の配達が失敗し、GAKEI が間隔を空けて送り直す(30 秒、60 秒、…)。管理者設定の「Mod」の直近の呼び出しに失敗が並ぶ。`send` にすると、「失敗のとき」が「止める」なら「送る前のチェックに失敗しました」で送信が止まり、「通す」なら送られる。
+- **時間切れ:** echo の待つ時間を 1 秒にして、`[[echo:send:sleep=3]]` で生成する(または設定 `delay_seconds` を待つ時間より長くする)。呼び出しは時間切れとして記録され、「失敗のとき」の扱いに従う。
+- **テスト送信:** 管理者設定の「テスト送信」でも同じく要約と封筒がログに出る。ダミーの画像は `asset_id` が null なので、Asset への判定は作らない(`run.finished` では Run への判定だけを返す)。ダミーの文 `GAKEI test event` にはマーカーが無いので、応答は設定で決まる。
 
 ## Webhook の受け口のサンプル
 

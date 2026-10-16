@@ -1,11 +1,11 @@
-"""3つの Mod のマニフェストと関数が、GAKEI の決まりに合うこと。"""
+"""サンプルの Mod のマニフェストと関数が、GAKEI の決まりに合うこと。"""
 
 from __future__ import annotations
 
 import gakei_mod
 import pytest
 
-MOD_IDS = ["audit-log", "banned-words", "hash-blocklist"]
+MOD_IDS = ["audit-log", "banned-words", "echo", "hash-blocklist"]
 
 
 def test_all_mods_are_found(mod_folders):
@@ -36,7 +36,7 @@ def test_gakei_accepts_the_manifest(mod_id, load_mod):
 
 @pytest.mark.parametrize(
     ("mod_id", "returns_verdicts"),
-    [("audit-log", False), ("banned-words", False), ("hash-blocklist", True)],
+    [("audit-log", False), ("banned-words", False), ("echo", True), ("hash-blocklist", True)],
 )
 def test_returns_verdicts(mod_id, returns_verdicts, load_mod):
     assert load_mod(mod_id).manifest.get("returns_verdicts", True) is returns_verdicts

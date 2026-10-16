@@ -1,0 +1,45 @@
+# デバッグ用: 3つのイベントの中身をログに出し、設定やプロンプトのマーカー([[echo:deny]] など)で
+# 許可・拒否・判定を自由に返す。Mod の連携を作るときの確認用。本番では使わない
+# (プロンプトがログに出る。マーカーを書けば誰でも拒否や deny の判定を出せる)。
+id = "echo"
+name = { ja = "エコー(デバッグ用)", en = "Echo (debugging)" }
+version = "1.0.0"
+api_version = 1
+module = "main"
+events = ["ai.before_send", "asset.ingested", "run.finished"]
+returns_verdicts = true
+
+[settings.before_send]
+type = "string"
+label = { ja = "ai.before_send への応答(allow / deny)", en = "Response to ai.before_send (allow / deny)" }
+default = "allow"
+
+[settings.ingested]
+type = "string"
+label = { ja = "asset.ingested の判定(none / ok / flag / deny。none は判定を返さない)", en = "Verdict for asset.ingested (none / ok / flag / deny; none returns no verdict)" }
+default = "none"
+
+[settings.run_finished]
+type = "string"
+label = { ja = "run.finished の判定(none / ok / flag / deny)", en = "Verdict for run.finished (none / ok / flag / deny)" }
+default = "none"
+
+[settings.delay_seconds]
+type = "number"
+label = { ja = "応答する前に待つ秒数(時間切れの確認用。0〜300)", en = "Seconds to wait before responding (for timeout checks; 0-300)" }
+default = 0
+
+[settings.fail_events]
+type = "string"
+label = { ja = "例外を投げるイベント(カンマ区切り。ai.before_send,asset.ingested,run.finished。send,ingested,run とも書ける)", en = "Events that raise an exception (comma-separated: ai.before_send, asset.ingested, run.finished; or send, ingested, run)" }
+default = ""
+
+[settings.markers]
+type = "bool"
+label = { ja = "プロンプトなどの文のマーカー([[echo:deny]] など)を読む(設定より優先する)", en = "Read markers such as [[echo:deny]] in prompts (they override the settings)" }
+default = true
+
+[settings.log_payload]
+type = "bool"
+label = { ja = "イベントの封筒全体を整形した JSON でもログに出す(プロンプトを含む)", en = "Also log the whole event envelope as pretty JSON (includes prompts)" }
+default = true
